@@ -1,11 +1,12 @@
-module StreamingUtil
+module TimeWindowStats
+
 using Datetime
 
 export Sum,Pct,Mean,update!
 
-abstract TimeWindowStats
+abstract TimeWindowStatistic
 
-type Sum{T} <:TimeWindowStats
+type Sum{T} <:TimeWindowStatistic
     tm::Int64
     xs::Vector{T}
     tms::Vector{DateTime}
@@ -28,7 +29,7 @@ function update!{T}(stat::Sum, v::T, tm::DateTime)
     return stat
 end
 
-type Mean{T} <:TimeWindowStats
+type Mean{T} <:TimeWindowStatistic
     tm::Int64
     n::Sum{T} # nominator
     d::Sum{T} # denominator (count)
@@ -43,7 +44,7 @@ function update!{T}(stat::Mean, n::T, tm::DateTime)
     return stat
 end
 
-type Pct{T} <:TimeWindowStats
+type Pct{T} <:TimeWindowStatistic
     tm::Int64
     n::Sum{T} # nominator
     d::Sum{T} # denominator
