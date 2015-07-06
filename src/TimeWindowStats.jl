@@ -39,8 +39,7 @@ end
 
 function update!{T}(stat::Mean, n::T, tm::DateTime)
     update!(stat.n, n, tm)
-    update!(stat.d, 1, tm)
-    stat.v = stat.n.v / stat.d.v
+    stat.v = stat.n.v / stat.n
     return stat
 end
 
