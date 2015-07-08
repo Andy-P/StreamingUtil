@@ -30,7 +30,9 @@ function update!{T}(stat::Sum, v::T, tm::DateTime)
     else
         while tm - stat.tms[i] > stat.tm
             reduced += stat.xs[i]
-#             println("reducing stat.xs[$(i)] v=$(stat.xs[i]) reduced $reduced")
+            if stat.tail - i > 20
+                println("reducing $(int64(tm - stat.tms[i])) $tm $(stat.tms[i]) xs[$(i)] v=$(stat.xs[i]) reduced $reduced")
+            end
             i = i < stat.size?i+1:1
         end
         stat.tail = i
