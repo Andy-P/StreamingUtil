@@ -8,7 +8,7 @@ dt3 = dt1 + Second(4)
 dt4 = dt1 + Second(5)
 dt5 = dt1 + Second(8)
 
-c = Sum{Float64}(5000,4)
+c = Sum(5000,4)
 update!(c,1., dt1)
 @test c.head == 1
 @test c.tail == 1
@@ -62,19 +62,19 @@ update!(c,9., dt5)
 @test c.size == 7
 @test c.v == 42.
 
-c = Sum{Int64}(5000)
+c = Sum(Int64,5000)
 update!(c,1, dt1)
 @test c.v == 1
 @test typeof(c.xs) == Vector{Int64}
 @test typeof(c.v) == Int64
 
-c = Pct{Int64}(5000)
+c = Pct(Int64,5000)
 update!(c,1,1, dt1)
 @test c.v == 1.
 update!(c,0,1, dt2)
 @test c.v == .5
 
-c = Mean{Int64}(5000)
+c = Mean(Int64,5000)
 update!(c,1, dt1)
 @test c.v == 1.
 update!(c,2, dt2)

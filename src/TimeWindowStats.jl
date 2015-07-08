@@ -2,22 +2,23 @@ module TimeWindowStats
 
 using Dates
 
-export Sum,Pct,Mean,update!
+export Sum, update!, Pct, Mean
 
 abstract TimeWindowStatistic
 
-type Sum{T} <:TimeWindowStatistic
+type Sum<:TimeWindowStatistic
     tm::Int64
     size::Int64
     tail::Int64
     head::Int64
-    xs::Vector{T}
+    xs::Vector
     tms::Vector{DateTime}
-    v::T # value
-    Sum(time::Int64, size::Int64=100) = new(time, size,0, 0, zeros(T,size),Array(DateTime,size), zero(T))
+    v # value
+    Sum(time::Int64, size::Int64=100) = new(time, size, 0, 0, zeros(size), Array(DateTime,size), 0)
+    Sum(T::Type, time::Int64, size::Int64=100) = new(time, size, 0, 0, zeros(T,size), Array(DateTime, size), zero(T))
 end
 
-function update!{T}(stat::Sum{T}, v::T, tm::DateTime)
+function update!{T}(stat::Sum, v::T, tm::DateTime)
 #     n = length(stat.xs)
     reduced = zero(T)
 
@@ -66,11 +67,12 @@ function update!{T}(stat::Sum{T}, v::T, tm::DateTime)
     return stat
 end
 
-type Mean{T} <:TimeWindowStatistic
+type Mean <:TimeWindowStatistic
     tm::Int64
-    n::Sum{T} # nominator
+    n::Sum # nominator
     v::Float64 # value
-    Mean(time::Int64) = new(time, Sum{T}(time), zero(T))
+    Mean(time::Int64) = new(time, Sum(time), 0)
+    Mean(T::Type, time::Int64) = new(time, Sum(T,time), zero(T))
 end
 
 function update!{T}(stat::Mean, n::T, tm::DateTime)
@@ -80,12 +82,13 @@ function update!{T}(stat::Mean, n::T, tm::DateTime)
     return stat
 end
 
-type Pct{T} <:TimeWindowStatistic
+type Pct<:TimeWindowStatistic
     tm::Int64
-    n::Sum{T} # nominator
-    d::Sum{T} # denominator
+    n::Sum # nominator
+    d::Sum # denominator
     v::Float64 # value
-    Pct(time::Int64) = new(time, Sum{T}(time), Sum{T}(time), zero(T))
+    Pct(time::Int64) = new(time, Sum(time), Sum(time), 0)
+    Pct(T::Type, time::Int64) = new(time, Sum(T,time), Sum(T,time), zero(T))
 end
 
 function update!{T}(stat::Pct, n::T, d::T, tm::DateTime)
