@@ -8,35 +8,58 @@ abstract TimeWindowStatistic
 
 type Sum{T} <:TimeWindowStatistic
     tm::Int64
-    lastIdx::Int64
+    size::Int64
+    tail::Int64
+    head::Int64
     xs::Vector{T}
     tms::Vector{DateTime}
     v::T # value
-    Sum(time::Int64) = new(time,0,T[],DateTime[],zero(T))
+    Sum(time::Int64, size::Int64=100) = new(time, size,0, 0, zeros(T,size),Array(DateTime,size), zero(T))
 end
 
 function update!{T}(stat::Sum{T}, v::T, tm::DateTime)
-    n = length(stat.xs)
+#     n = length(stat.xs)
     reduced = zero(T)
-    i = 0
-    while i < stat.lastIdx && (tm - stat.tms[i+1] > stat.tm)
-        i += 1
-        reduced += stat.xs[i]
-    end
 
-    if i > 0 # shift values if anything needs ot be removed
-        stat.tms[1:stat.lastIdx-i] = stat.tms[1+i:stat.lastIdx]
-        stat.xs[1:stat.lastIdx-i] = stat.xs[1+i:stat.lastIdx]
-        stat.lastIdx -= i
-    end
-
-    stat.lastIdx += 1
-    if stat.lastIdx <= length(stat.tms)
-        stat.tms[stat.lastIdx] = tm
-        stat.xs[stat.lastIdx]  = v
+    arrayFull　= false
+    nextHead = stat.head+1 <= stat.size? stat.head+1:1
+    i = stat.tail
+    if stat.tail ==0
+        stat.tail = 1
     else
-        push!(stat.tms,tm)
-        push!(stat.xs,v)
+        while tm - stat.tms[i] > stat.tm
+            reduced += stat.xs[i]
+#             println("reducing stat.xs[$(i)] v=$(stat.xs[i]) reduced $reduced")
+            i = i < stat.size?i+1:1
+        end
+        stat.tail = i
+        arrayFull = nextHead == stat.tail
+    end
+
+    if !arrayFull
+        stat.xs[nextHead] = v
+        stat.tms[nextHead] = tm
+        stat.head = nextHead
+    else
+        newSize = iceil(stat.size*1.05) # increase size by 5%
+        newValues = zeros(T,newSize)
+        newDates  = Array(DateTime,newSize)
+#         println("Array full! size=$(stat.size) newSize=$(newSize) head=$(stat.head) tail=$(stat.tail) nextHead=$(nextHead)")
+        if  stat.head > stat.tail
+            newValues[1:stat.size] = stat.xs[stat.tail:stat.head]
+            newDates[1:stat.size] = stat.tms[stat.tail:stat.head]
+        else
+            newValues[1:stat.size] = vcat(stat.xs[stat.tail:end],stat.xs[1:stat.head])
+            newDates[1:stat.size]  = vcat(stat.tms[stat.tail:end],stat.tms[1:stat.head])
+        end
+        stat.xs = newValues
+        stat.tms = newDates
+        stat.tail = 1
+        stat.head = stat.size+1
+        stat.xs[stat.head] = v
+        stat.tms[stat.head] = tm
+        stat.size = newSize
+#         println("Array full! tail=$(stat.tail) head=$(stat.head) nextHead=$(nextHead) newSize=$newSize")
     end
 
     stat.v += v - reduced # calculate and cache latest value
@@ -52,7 +75,8 @@ end
 
 function update!{T}(stat::Mean, n::T, tm::DateTime)
     update!(stat.n, n, tm)
-    stat.v = stat.n.v / stat.n.lastIdx
+    len = stat.n.tail <= stat.n.head? stat.n.head - stat.n.tail + 1 : stat.n.size - stat.n.tail + stat.n.head + 1
+    stat.v = stat.n.v / len
     return stat
 end
 
