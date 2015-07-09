@@ -8,65 +8,78 @@ abstract TimeWindowStatistic
 
 type Sum<:TimeWindowStatistic
     tm::Int64
-    size::Int64
-    tail::Int64
-    head::Int64
-    xs::Vector
+    size::Int64 # size of the array including empty cells
+    len::Int64 # number of values in the calculation
+    tail::Int64 # index of last value
+    head::Int64 # index of last value
     tms::Vector{DateTime}
+    xs::Vector
     v # value
-    Sum(time::Int64, size::Int64=100) = new(time, size, 0, 0, zeros(size), Array(DateTime,size), 0)
-    Sum(T::Type, time::Int64, size::Int64=100) = new(time, size, 0, 0, zeros(T,size), Array(DateTime, size), zero(T))
+    Sum(time::Int64, size::Int64=100) = new(time, size, 0, 0, 0, fill(DateTime(1900,1,1,0,0,0),size),[])
 end
 
-function update!{T}(stat::Sum, v::T, tm::DateTime)
-#     n = length(stat.xs)
-    reduced = zero(T)
+function update!(s::Sum, v, tm::DateTime)
 
+    # initalization
+    reducedCnt = 0
+    reducedAmt = zero(typeof(v))
     arrayFull　= false
-    nextHead = stat.head+1 <= stat.size? stat.head+1:1
-    i = stat.tail
-    if stat.tail ==0
-        stat.tail = 1
-    else
-        while tm - stat.tms[i] > stat.tm
-            reduced += stat.xs[i]
-            if stat.tail - i > 20
-                println("reducing $(int64(tm - stat.tms[i])) $tm $(stat.tms[i]) xs[$(i)] v=$(stat.xs[i]) reduced $reduced")
-            end
-            i = i < stat.size?i+1:1
+    nextHead = s.head+1 <= s.size? s.head+1:1
+
+    if s.tail != 0
+        i = s.tail
+#         msg = tm - s.tms[i] > s.tm? "reduce":"no-reduce"
+
+        while tm - s.tms[i] > s.tm && reducedCnt < s.len
+            reducedAmt += s.xs[i]
+            reducedCnt += 1
+            i = i < s.size?i+1:1
+#             println("  reduced $(s.len) $(int64(tm - s.tms[i-1])) reducedCnt $reducedCnt i=$(i-1) $(s.tms[i-1]) $(s.xs[i-1])")
         end
-        stat.tail = i
-        arrayFull = nextHead == stat.tail
+#         println("     $msg i=$i reduced $reducedAmt")
+        s.tail = i
+
+    else  # only happens during initialization
+        s.tail = 1
+        s.xs = zeros(typeof(v), s.size)
+        s.v = zero(typeof(v))
     end
+
+    s.len -= reducedCnt
+    arrayFull = s.len + 1 >= s.size
+#     println("    arrayFull $arrayFull")
 
     if !arrayFull
-        stat.xs[nextHead] = v
-        stat.tms[nextHead] = tm
-        stat.head = nextHead
+        s.xs[nextHead] = v
+        s.tms[nextHead] = tm
+        s.head = nextHead
     else
-        newSize = iceil(stat.size*1.05) # increase size by 5%
-        newValues = zeros(T,newSize)
-        newDates  = Array(DateTime,newSize)
-#         println("Array full! size=$(stat.size) newSize=$(newSize) head=$(stat.head) tail=$(stat.tail) nextHead=$(nextHead)")
-        if  stat.head > stat.tail
-            newValues[1:stat.size] = stat.xs[stat.tail:stat.head]
-            newDates[1:stat.size] = stat.tms[stat.tail:stat.head]
+        newSize = iceil(s.size*1.05) # increase size by 5%
+        newValues = zeros(typeof(v),newSize)
+        newDates  = fill(DateTime(1900,1,1,0,0,0),newSize)
+        s.size = newSize
+#         println("Array full! size=$(s.size) newSize=$(newSize) head=$(s.head) tail=$(s.tail) nextHead=$(nextHead)")
+        if  s.head > s.tail
+            newValues[1:s.len] = s.xs[s.tail:s.head]
+            newDates[1:s.len] = s.tms[s.tail:s.head]
         else
-            newValues[1:stat.size] = vcat(stat.xs[stat.tail:end],stat.xs[1:stat.head])
-            newDates[1:stat.size]  = vcat(stat.tms[stat.tail:end],stat.tms[1:stat.head])
+#             println("Reversed $(s.tail)  $(s.head)  $(s.len)")
+            newValues[1:s.len] = vcat(s.xs[s.tail:end],s.xs[1:s.head])
+            newDates[1:s.len]  = vcat(s.tms[s.tail:end],s.tms[1:s.head])
+#             println("Reversed done")
         end
-        stat.xs = newValues
-        stat.tms = newDates
-        stat.tail = 1
-        stat.head = stat.size+1
-        stat.xs[stat.head] = v
-        stat.tms[stat.head] = tm
-        stat.size = newSize
-#         println("Array full! tail=$(stat.tail) head=$(stat.head) nextHead=$(nextHead) newSize=$newSize")
+        s.xs = newValues
+        s.tms = newDates
+        s.tail = 1
+        s.head = s.len+1
+        s.xs[s.head] = v
+        s.tms[s.head] = tm
+#         println("Array full! tail=$(s.tail) head=$(s.head) nextHead=$(nextHead) newSize=$newSize")
     end
 
-    stat.v += v - reduced # calculate and cache latest value
-    return stat
+    s.v += v - reducedAmt # calculate and cache latest value
+    s.len += 1
+    return s
 end
 
 type Mean <:TimeWindowStatistic
@@ -74,14 +87,12 @@ type Mean <:TimeWindowStatistic
     n::Sum # nominator
     v::Float64 # value
     Mean(time::Int64) = new(time, Sum(time), 0)
-    Mean(T::Type, time::Int64) = new(time, Sum(T,time), zero(T))
 end
 
-function update!{T}(stat::Mean, n::T, tm::DateTime)
-    update!(stat.n, n, tm)
-    len = stat.n.tail <= stat.n.head? stat.n.head - stat.n.tail + 1 : stat.n.size - stat.n.tail + stat.n.head + 1
-    stat.v = stat.n.v / len
-    return stat
+function update!(s::Mean, n, tm::DateTime)
+    update!(s.n, n, tm)
+    s.v = s.n.v / s.n.len
+    return s
 end
 
 type Pct<:TimeWindowStatistic
@@ -89,15 +100,14 @@ type Pct<:TimeWindowStatistic
     n::Sum # nominator
     d::Sum # denominator
     v::Float64 # value
-    Pct(time::Int64) = new(time, Sum(time), Sum(time), 0)
-    Pct(T::Type, time::Int64) = new(time, Sum(T,time), Sum(T,time), zero(T))
+    Pct(time::Int64, size::Int64=100) = new(time, Sum(time,size), Sum(time,size), 0)
 end
 
-function update!{T}(stat::Pct, n::T, d::T, tm::DateTime)
-    update!(stat.n, n, tm)
-    update!(stat.d, d, tm)
-    stat.v = stat.d!=0? stat.n.v/stat.d.v : zero(T)
-    return stat
+function update!(s::Pct, n, d, tm::DateTime)
+    update!(s.n, n, tm)
+    update!(s.d, d, tm)
+    s.v = s.d ==0?: 0: s.n.v/s.d.v
+    return s
 end
 
 end # module
